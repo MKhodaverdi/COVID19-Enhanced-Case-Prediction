@@ -8,11 +8,17 @@ import time
 from pylab import rcParams
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, StratifiedKFold
+from tensorflow import keras
+from keras.models import Model, Sequential
 from keras.layers import Dense, LSTM, Dropout
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
 from keras.optimizers import Adam
 from bayes_opt import BayesianOptimization
 from datetime import datetime, timedelta
+
+tf.__version__
+from tensorflow.compat.v1.keras.backend import get_session
+tf.compat.v1.disable_v2_behavior()
 
 # import 
 covid_7 = pd.read_csv('C:/Users/khodaverdi/Desktop/New folder/data/covid/WV_COVID_data_tot.csv') 
@@ -46,11 +52,12 @@ def data_prep_new(covid_7, covid_14, popu, holiday):
     covid = covid_7  
     covid = popu[['county', 'population']].merge(covid, on='county', how='left')
     covid = holiday.merge(covid, on='date', how='right')
-    covid = covid[['date', 'county', 'incid', 'R_exp7', 'R_sig7', 'R_param_a7', 'R_param_b7', 'Prob_R7', 
+    covid = covid[['date', 'county', 'incid', 'R_exp7_x', 'R_exp7_y', 'R_exp7',
+		   'cum_full_180day', 'vaccine_7uptake', 'test_last7', 'recovered',
                    'population', 'weekend', 'holidays', 'hdistance', 'tholiday'
-                   , 'R_exp14', 'R_sig14', 'R_param_a14', 'R_param_b14', 'Prob_R14'
                    ]]
     covid = covid.rename(columns={ "incid": "incid_x"})
+    covid = covid.reset_index(drop=True)
      
     print('data summary')
     print('Covid set shape == {}'.format(covid.shape))
@@ -149,8 +156,8 @@ def fitted_model(X_test,y_test,dropout,neuronCount,neuronShrink, activFun, lr, e
     
     model = generate_model(dropout, neuronCount, neuronShrink, activFun)
     model.compile(optimizer = Adam(learning_rate=lr), loss='mean_absolute_error')
-    es = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=30, verbose=1)
-    rlr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=30, verbose=1)
+    es = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=100, verbose=1)
+    rlr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=100, verbose=1)
     mcp = ModelCheckpoint(filepath='weights.h5', monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True)
     tb = TensorBoard('logs') 
     history = model.fit(X_train, y_train, shuffle=True, epochs=epoch, callbacks=[es, rlr, mcp, tb],
@@ -194,8 +201,8 @@ pbound = { 'dropout': (0.05, 0.045),
            'neuronShrink': (0.01, 1),
            'lr': (0, 0.1),
            'epoch': (4, 512), 
-	       'batch' : (4, 512),
-	       'activFun' :("relu", "tanh")
+	   'batch' : (4, 512),
+	   'activFun' :("relu", "tanh")
           }
 optimizer = BayesianOptimization(f=evaluate_models, pbounds=pbound, verbose=2, random_state=1)
 start_time = time.time()
